@@ -94,8 +94,10 @@ impl Miner {
                         println!("Success: {}", sig);
                         break;
                     }
-                    Err(_err) => {
+                    Err(err) => {
                         // TODO
+                        println!("Err: {}", err);
+                        break;
                     }
                 }
             }

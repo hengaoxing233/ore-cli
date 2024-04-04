@@ -18,9 +18,9 @@ use solana_transaction_status::{TransactionConfirmationStatus, UiTransactionEnco
 
 use crate::Miner;
 
-const RPC_RETRIES: usize = 1;
-const GATEWAY_RETRIES: usize = 4;
-const CONFIRM_RETRIES: usize = 4;
+const RPC_RETRIES: usize = 3;
+const GATEWAY_RETRIES: usize = 10;
+const CONFIRM_RETRIES: usize = 10;
 
 impl Miner {
     pub async fn send_and_confirm(
@@ -78,7 +78,7 @@ impl Miner {
                         std::thread::sleep(Duration::from_millis(2000));
                         match client.get_signature_statuses(&sigs).await {
                             Ok(signature_statuses) => {
-                                println!("Confirms: {:?}", signature_statuses.value);
+                                println!("Confirms: {:?}", signature_statuses);
                                 for signature_status in signature_statuses.value {
                                     if let Some(signature_status) = signature_status.as_ref() {
                                         if signature_status.confirmation_status.is_some() {

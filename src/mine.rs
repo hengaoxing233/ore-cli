@@ -29,7 +29,7 @@ impl Miner {
         self.register().await;
         let mut stdout = stdout();
         let mut rng = rand::thread_rng();
-
+        let mut success_num = 0;
         // Start mining loop
         loop {
             // Fetch account state
@@ -91,15 +91,19 @@ impl Miner {
                     .await
                 {
                     Ok(sig) => {
+                        success_num += 1;
                         println!("Success: {}", sig);
+                        println!("已成功数量: {:?}", success_num);
                         break;
                     }
                     Err(err) => {
                         // TODO
                         println!("Err: {}", err);
+                        println!("已成功数量: {:?}", success_num);
                         break;
                     }
                 }
+
             }
         }
     }

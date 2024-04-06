@@ -6,11 +6,12 @@ use std::{
 use solana_client::{
     client_error::{ClientError, ClientErrorKind, Result as ClientResult},
     nonblocking::rpc_client::RpcClient,
-    rpc_config::RpcSendTransactionConfig,
+    rpc_config::{RpcSendTransactionConfig, RpcSimulateTransactionConfig},
 };
 use solana_program::instruction::Instruction;
 use solana_sdk::{
     commitment_config::{CommitmentConfig, CommitmentLevel},
+    compute_budget::ComputeBudgetInstruction,
     signature::{Signature, Signer},
     transaction::Transaction,
 };
@@ -19,6 +20,7 @@ use solana_transaction_status::{TransactionConfirmationStatus, UiTransactionEnco
 use crate::Miner;
 
 const RPC_RETRIES: usize = 3;
+const SIMULATION_RETRIES: usize = 5;
 const GATEWAY_RETRIES: usize = 10;
 const CONFIRM_RETRIES: usize = 10;
 
@@ -26,6 +28,7 @@ impl Miner {
     pub async fn send_and_confirm(
         &self,
         ixs: &[Instruction],
+        dynamic_cus: bool,
         skip_confirm: bool,
     ) -> ClientResult<Signature> {
         let mut stdout = stdout();
@@ -41,7 +44,7 @@ impl Miner {
         if balance.value <= 0 {
             return Err(ClientError {
                 request: None,
-                kind: ClientErrorKind::Custom("Insufficient SOL balance".into()),
+                kind: ClientErrorKind::Custom("SOL余额不足，如果链上有余额，那么请检查RPC".into()),
             });
         }
 
@@ -58,13 +61,71 @@ impl Miner {
             min_context_slot: Some(slot),
         };
         let mut tx = Transaction::new_with_payer(ixs, Some(&signer.pubkey()));
-        tx.sign(&[&signer], hash);
+
+        // Simulate if necessary
+        if dynamic_cus {
+            println!("正在模拟");
+            let mut sim_attempts = 0;
+            'simulate: loop {
+                let sim_res = client
+                    .simulate_transaction_with_config(
+                        &tx,
+                        RpcSimulateTransactionConfig {
+                            sig_verify: false,
+                            replace_recent_blockhash: true,
+                            commitment: Some(CommitmentConfig::confirmed()),
+                            encoding: Some(UiTransactionEncoding::Base64),
+                            accounts: None,
+                            min_context_slot: None,
+                            inner_instructions: false,
+                        },
+                    )
+                    .await;
+                match sim_res {
+                    Ok(sim_res) => {
+                        if let Some(err) = sim_res.value.err {
+                            println!("模拟报错: {:?}", err);
+                            sim_attempts += 1;
+                            if sim_attempts.gt(&SIMULATION_RETRIES) {
+                                return Err(ClientError {
+                                    request: None,
+                                    kind: ClientErrorKind::Custom("模拟失败".into()),
+                                });
+                            }
+                        } else if let Some(units_consumed) = sim_res.value.units_consumed {
+                            println!("Dynamic CUs: {:?}", units_consumed);
+                            let cu_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(
+                                units_consumed as u32 + 1000,
+                            );
+                            let cu_price_ix =
+                                ComputeBudgetInstruction::set_compute_unit_price(self.priority_fee);
+                            let mut final_ixs = vec![];
+                            final_ixs.extend_from_slice(&[cu_budget_ix, cu_price_ix]);
+                            final_ixs.extend_from_slice(ixs);
+                            tx = Transaction::new_with_payer(&final_ixs, Some(&signer.pubkey()));
+                            break 'simulate;
+                        }
+                    }
+                    Err(err) => {
+                        println!("模拟报错: {:?}", err);
+                        sim_attempts += 1;
+                        if sim_attempts.gt(&SIMULATION_RETRIES) {
+                            return Err(ClientError {
+                                request: None,
+                                kind: ClientErrorKind::Custom("模拟失败".into()),
+                            });
+                        }
+                    }
+                }
+            }
+        }
 
         // Submit tx
+        tx.sign(&[&signer], hash);
         let mut sigs = vec![];
         let mut attempts = 0;
         loop {
-            println!("Attempt: {:?}", attempts);
+            println!("第{:?}次尝试", attempts);
             match client.send_transaction_with_config(&tx, send_cfg).await {
                 Ok(sig) => {
                     sigs.push(sig);
@@ -78,10 +139,12 @@ impl Miner {
                         std::thread::sleep(Duration::from_millis(2000));
                         match client.get_signature_statuses(&sigs).await {
                             Ok(signature_statuses) => {
-                                println!("Confirms: {:?}", signature_statuses);
+                                println!("等待确认列表: {:?}", signature_statuses.value);
                                 for signature_status in signature_statuses.value {
                                     if let Some(signature_status) = signature_status.as_ref() {
+                                        let transaction_status = &signature_status.status;
                                         if signature_status.confirmation_status.is_some() {
+
                                             let current_commitment = signature_status
                                                 .confirmation_status
                                                 .as_ref()
@@ -90,8 +153,22 @@ impl Miner {
                                                 TransactionConfirmationStatus::Processed => {}
                                                 TransactionConfirmationStatus::Confirmed
                                                 | TransactionConfirmationStatus::Finalized => {
-                                                    println!("Transaction landed!");
-                                                    return Ok(sig);
+                                                    println!("交易已结束!");
+                                                    match transaction_status {
+                                                        Ok(()) => {
+                                                            // 处理 Ok(()) 的情况
+                                                            println!("上链成功");
+                                                            return Ok(sig);
+                                                        }
+                                                        Err(err) => {
+                                                            // 处理错误情况
+                                                            println!("上链失败: {:?}", err);
+                                                            return Err(ClientError {
+                                                                request: None,
+                                                                kind: ClientErrorKind::Custom("上链失败".into()),
+                                                            });
+                                                        }
+                                                    }
                                                 }
                                             }
                                         } else {
@@ -107,7 +184,7 @@ impl Miner {
                             }
                         }
                     }
-                    println!("Transaction did not land");
+                    println!("交易进行中");
                 }
 
                 // Handle submit errors
@@ -118,7 +195,7 @@ impl Miner {
             stdout.flush().ok();
 
             // Retry
-            std::thread::sleep(Duration::from_millis(200));
+            std::thread::sleep(Duration::from_millis(2000));
             (hash, slot) = client
                 .get_latest_blockhash_with_commitment(CommitmentConfig::confirmed())
                 .await
@@ -135,7 +212,7 @@ impl Miner {
             if attempts > GATEWAY_RETRIES {
                 return Err(ClientError {
                     request: None,
-                    kind: ClientErrorKind::Custom("Max retries".into()),
+                    kind: ClientErrorKind::Custom("已达最大重试次数，重新开始挖矿".into()),
                 });
             }
         }

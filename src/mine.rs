@@ -33,26 +33,26 @@ impl Miner {
         // Start mining loop
         loop {
             // Fetch account state
-            let balance = self.get_ore_display_balance().await;
+            // let balance = self.get_ore_display_balance().await;
             let treasury = get_treasury(self.cluster.clone()).await;
             let proof = get_proof(self.cluster.clone(), signer.pubkey()).await;
             let rewards =
                 (proof.claimable_rewards as f64) / (10f64.powf(ore::TOKEN_DECIMALS as f64));
             let reward_rate =
                 (treasury.reward_rate as f64) / (10f64.powf(ore::TOKEN_DECIMALS as f64));
-            stdout.write_all(b"\x1b[2J\x1b[3J\x1b[H").ok();
-            println!("Balance: {} ORE", balance);
-            println!("Claimable: {} ORE", rewards);
-            println!("Reward rate: {} ORE", reward_rate);
+            // stdout.write_all(b"\x1b[2J\x1b[3J\x1b[H").ok();
+            // println!("Balance: {} ORE", balance);
+            println!("待领取: {} ORE", rewards);
+            println!("奖励率: {} ORE", reward_rate);
 
             // Escape sequence that clears the screen and the scrollback buffer
-            println!("\nMining for a valid hash...");
+            println!("\n正在计算哈希值...");
             let (next_hash, nonce) =
                 self.find_next_hash_par(proof.hash.into(), treasury.difficulty.into(), threads);
 
             // Submit mine tx.
             // Use busses randomly so on each epoch, transactions don't pile on the same busses
-            println!("\n\nSubmitting hash for validation...");
+            println!("\n\n正在提交哈希进行验证...");
             loop {
                 // Reset epoch, if needed
                 let treasury = get_treasury(self.cluster.clone()).await;
@@ -67,7 +67,7 @@ impl Miner {
                         let cu_price_ix =
                             ComputeBudgetInstruction::set_compute_unit_price(self.priority_fee);
                         let reset_ix = ore::instruction::reset(signer.pubkey());
-                        self.send_and_confirm(&[cu_limit_ix, cu_price_ix, reset_ix], true)
+                        self.send_and_confirm(&[cu_limit_ix, cu_price_ix, reset_ix], false, true)
                             .await
                             .ok();
                     }
@@ -87,7 +87,7 @@ impl Miner {
                     nonce,
                 );
                 match self
-                    .send_and_confirm(&[cu_limit_ix, cu_price_ix, ix_mine], false)
+                    .send_and_confirm(&[cu_limit_ix, cu_price_ix, ix_mine], false, false)
                     .await
                 {
                     Ok(sig) => {
@@ -103,7 +103,6 @@ impl Miner {
                         break;
                     }
                 }
-
             }
         }
     }

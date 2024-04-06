@@ -18,7 +18,7 @@ mod utils;
 use std::sync::Arc;
 
 use clap::{command, Parser, Subcommand};
-use solana_sdk::signature::{Keypair};
+use solana_sdk::signature::{ Keypair};
 
 struct Miner {
     pub keypair_private_key: Option<String>,
@@ -30,25 +30,25 @@ struct Miner {
 #[command(about, version)]
 struct Args {
     #[arg(
-        long,
-        value_name = "NETWORK_URL",
-        help = "Network address of your RPC provider",
-        default_value = "https://api.mainnet-beta.solana.com"
+    long,
+    value_name = "NETWORK_URL",
+    help = "Network address of your RPC provider",
+    default_value = "https://api.mainnet-beta.solana.com"
     )]
     rpc: String,
 
     #[arg(
-        long,
-        value_name = "keypair_private_key",
-        help = "Filepath to keypair to use"
+    long,
+    value_name = "keypair_private_key",
+    help = "Filepath to keypair to use"
     )]
     keypair: Option<String>,
 
     #[arg(
-        long,
-        value_name = "MICROLAMPORTS",
-        help = "Number of microlamports to pay as priority fee per transaction",
-        default_value = "0"
+    long,
+    value_name = "MICROLAMPORTS",
+    help = "Number of microlamports to pay as priority fee per transaction",
+    default_value = "0"
     )]
     priority_fee: u64,
 
@@ -92,9 +92,9 @@ enum Commands {
 #[derive(Parser, Debug)]
 struct BalanceArgs {
     #[arg(
-        // long,
-        value_name = "ADDRESS",
-        help = "The address of the account to fetch the balance of"
+    // long,
+    value_name = "ADDRESS",
+    help = "The address of the account to fetch the balance of"
     )]
     pub address: Option<String>,
 }
@@ -105,9 +105,9 @@ struct BussesArgs {}
 #[derive(Parser, Debug)]
 struct RewardsArgs {
     #[arg(
-        // long,
-        value_name = "ADDRESS",
-        help = "The address of the account to fetch the rewards balance of"
+    // long,
+    value_name = "ADDRESS",
+    help = "The address of the account to fetch the rewards balance of"
     )]
     pub address: Option<String>,
 }
@@ -115,11 +115,11 @@ struct RewardsArgs {
 #[derive(Parser, Debug)]
 struct MineArgs {
     #[arg(
-        long,
-        short,
-        value_name = "THREAD_COUNT",
-        help = "The number of threads to dedicate to mining",
-        default_value = "1"
+    long,
+    short,
+    value_name = "THREAD_COUNT",
+    help = "The number of threads to dedicate to mining",
+    default_value = "1"
     )]
     threads: u64,
 }
@@ -130,16 +130,16 @@ struct TreasuryArgs {}
 #[derive(Parser, Debug)]
 struct ClaimArgs {
     #[arg(
-        // long,
-        value_name = "AMOUNT",
-        help = "The amount of rewards to claim. Defaults to max."
+    // long,
+    value_name = "AMOUNT",
+    help = "The amount of rewards to claim. Defaults to max."
     )]
     amount: Option<f64>,
 
     #[arg(
-        // long,
-        value_name = "TOKEN_ACCOUNT_ADDRESS",
-        help = "Token account to receive mining rewards."
+    // long,
+    value_name = "TOKEN_ACCOUNT_ADDRESS",
+    help = "Token account to receive mining rewards."
     )]
     beneficiary: Option<String>,
 }
